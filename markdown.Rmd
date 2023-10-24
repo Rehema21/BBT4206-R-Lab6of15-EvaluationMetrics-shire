@@ -1,0 +1,239 @@
+---
+title: "Evaluation Metrics"
+output: 
+date: "2023-10-24"
+---
+
+
+
+
+```{r library}
+library(readr)
+if (require("languageserver")) {
+  require("languageserver")
+} else {
+  install.packages("languageserver", dependencies = TRUE,
+                   repos = "https://cloud.r-project.org")
+}
+
+# STEP 1. Install and Load the Required Packages ----
+## ggplot2 ----
+if (require("ggplot2")) {
+  require("ggplot2")
+} else {
+  install.packages("ggplot2", dependencies = TRUE,
+                   repos = "https://cloud.r-project.org")
+}
+
+## caret ----
+if (require("caret")) {
+  require("caret")
+} else {
+  install.packages("caret", dependencies = TRUE,
+                   repos = "https://cloud.r-project.org")
+}
+
+## mlbench ----
+if (require("mlbench")) {
+  require("mlbench")
+} else {
+  install.packages("mlbench", dependencies = TRUE,
+                   repos = "https://cloud.r-project.org")
+}
+
+## pROC ----
+if (require("pROC")) {
+  require("pROC")
+} else {
+  install.packages("pROC", dependencies = TRUE,
+                   repos = "https://cloud.r-project.org")
+}
+
+## dplyr ----
+if (require("dplyr")) {
+  require("dplyr")
+} else {
+  install.packages("dplyr", dependencies = TRUE,
+                   repos = "https://cloud.r-project.org")
+
+}
+```
+
+```{r Step 1}
+data(Employee)
+Employee[is.na(Employee)]<- 0
+## 1.b. Determine the Baseline Accuracy ----
+Employee_freq <- Employee$Gender
+cbind(frequency =
+        table(Employee_freq),
+      percentage = prop.table(table(Employee_freq)) * 100)
+
+## 1.c. Split the dataset ----
+train_index <- createDataPartition(Employee$Gender,
+                                   p = 0.75,
+                                   list = FALSE)
+Employee_train <- Employee[train_index, ]
+Employee_test <- Employee[-train_index, ]
+
+## 1.d. Train the Model ----
+# We apply the 5-fold cross validation resampling method
+train_control <- trainControl(method = "cv", number = 5)
+set.seed(7)
+Gender_model_glm <-
+  train(Gender ~ ., data = Employee_train, method = "glm",
+        metric = "Accuracy", trControl = train_control)
+
+## 1.e. Display the Model's Performance ----
+### Option 1: Use the metric calculated by caret when training the model ----
+print(Gender_model_glm)
+
+predictions <- predict(Gender_model_glm, Employee_test[, 1:8])
+confusion_matrix <-
+  caret::confusionMatrix(predictions,
+                         Employee_test[, 1:9]$Gender)
+print(confusion_matrix)
+
+fourfoldplot(as.table(confusion_matrix), color = c("grey", "lightblue"),
+             main = "Confusion Matrix")
+
+```
+
+
+```{r Step 2}
+data(mtcars)
+summary(mtcars)
+mtcars_no_na <- na.omit(mtcars)
+
+## 2.b. Split the dataset ----
+set.seed(7)
+
+# We apply simple random sampling using the base::sample function to get
+# 10 samples
+train_index <- sample(1:dim(mtcars)[1], 10) # nolint: seq_linter.
+mtcars_train <- mtcars[train_index, ]
+mtcars_test <- mtcars[-train_index, ]
+
+## 2.c. Train the Model ----
+train_control <- trainControl(method = "boot", number = 1000)
+
+mtcars_model_lm <-
+  train(cyl ~ ., data = mtcars_train,
+        na.action = na.omit, method = "lm", metric = "RMSE",
+        trControl = train_control)
+
+## 2.d. Display the Model's Performance ----
+### Option 1: Use the metric calculated by caret when training the model ----
+print(mtcars_model_lm)
+
+### Option 2: Compute the metric yourself using the test dataset ----
+predictions <- predict(mtcars_model_lm, mtcars_test[, 1:6])
+
+print(predictions)
+
+#### RMSE ----
+rmse <- sqrt(mean((mtcars_test$cyl - predictions)^2))
+print(paste("RMSE =", rmse))
+
+#### SSR ----
+# SSR is the sum of squared residuals (the sum of squared differences
+# between observed and predicted values)
+ssr <- sum((mtcars_test$cyl - predictions)^2)
+print(paste("SSR =", ssr))
+
+#### SST ----
+# SST is the total sum of squares (the sum of squared differences
+# between observed values and their mean)
+sst <- sum((longley_test$cyl - mean(mtcars_test$cyl))^2)
+print(paste("SST =", sst))
+
+#### MAE ----
+absolute_errors <- abs(predictions - mtcars_test$cyl)
+mae <- mean(absolute_errors)
+print(paste("MAE =", mae))
+
+```
+
+
+```{r Step 3}
+## 3.b. Determine the Baseline Accuracy ----
+
+
+breast_cancer_wisconsin_data_data_freq <- breast_cancer_wisconsin_data_data$diagnosis
+cbind(frequency =
+        table(breast_cancer_wisconsin_data_data_freq),
+      percentage = prop.table(table(breast_cancer_wisconsin_data_data_freq)) * 100)
+
+## 3.c. Split the dataset ----
+# Define an 80:20 train:test data split of the dataset.
+train_index <- createDataPartition(breast_cancer_wisconsin_data_data,
+                                   p = 0.8,
+                                   list = FALSE)
+breast_cancer_wisconsin_data_data_train <- breast_cancer_wisconsin_data_data[train_index, ]
+breast_cancer_wisconsin_data_data <- breast_cancer_wisconsin_data_data[-train_index, ]
+
+## 3.d. Train the Model ----
+# We apply the 10-fold cross validation resampling method
+train_control <- trainControl(method = "cv", number = 10,
+                              classProbs = TRUE,
+                              summaryFunction = twoClassSummary)
+
+# We then train a k Nearest Neighbours Model to predict the value of Diabetes
+# (whether the patient will test positive/negative for diabetes).
+
+set.seed(7)
+diagnosis_model_knn <-
+  train(diagnosis ~ ., data = breast_cancer_wisconsin_data_data_train, method = "knn",
+        metric = "ROC", trControl = train_control)
+
+print(diagnosis_model_knn)
+
+### Option 2: Compute the metric yourself using the test dataset ----
+#### Sensitivity and Specificity ----
+predictions <- predict(diagnosis_model_knn, breast_cancer_wisconsin_data_data_test[, 1:8])
+# These are the values for diabetes that the
+# model has predicted:
+print(predictions)
+confusion_matrix <-
+  caret::confusionMatrix(predictions,
+                         breast_cancer_wisconsin_data_data_test[, 1:9]$diagnosis)
+
+# We can see the sensitivity (≈ 0.86) and the specificity (≈ 0.60) below:
+print(confusion_matrix)
+
+#### AUC ----
+# The type = "prob" argument specifies that you want to obtain class
+# probabilities as the output of the prediction instead of class labels.
+predictions <- predict(diabetes_model_knn, pima_indians_diabetes_test[, 1:8],
+                       type = "prob")
+
+# These are the class probability values for diabetes that the
+# model has predicted:
+print(predictions)
+
+roc_curve <- roc(pima_indians_diabetes_test$diabetes, predictions$neg)
+
+# Plot the ROC curve
+plot(roc_curve, main = "ROC Curve for KNN Model", print.auc = TRUE,
+     print.auc.x = 0.6, print.auc.y = 0.6, col = "blue", lwd = 2.5)
+
+```
+
+```{r Step 4}
+data(Employee)
+names(Employee)
+
+## 4.b. Train the Model ----
+
+train_control <- trainControl(method = "repeatedcv", number = 5, repeats = 3,
+                              classProbs = TRUE,
+                              summaryFunction = mnLogLoss)
+set.seed(7)
+
+Employee_model_cart <- train(City~ ., data = Employee, method = "rpart",
+                         metric = "logLoss", trControl = train_control)
+
+## 4.c. Display the Model's Performance ----
+
+print(Employee_model_cart)
+```
+
